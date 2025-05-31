@@ -1,51 +1,134 @@
-from flask import Flask, render_template, request
-import numpy as np
-import tensorflow as tf
-from sklearn.preprocessing import MinMaxScaler
-import joblib
+import os
+import nltk
+import ssl
+import random
+import time
+import streamlit as st
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 
-app = Flask(__name__)
+# NLTK setup
+ssl._create_default_https_context = ssl._create_unverified_context
+nltk.download('punkt')
 
-# Load the trained model
-model = tf.keras.models.load_model('model/autoencoder_model.h5')
+# Sample intents with emojis
+intents = [
+    {
+        "tag": "greeting",
+        "patterns": ["Hi", "Hello", "Hey", "How are you", "What's up"],
+        "responses": ["Hey there! 😊", "Hi hi! 👋", "What's up? 😎", "I'm vibin' ✨ How about you?"]
+    },
+    {
+        "tag": "goodbye",
+        "patterns": ["Bye", "See you later", "Goodbye", "Take care"],
+        "responses": ["See ya! 👋", "Take care! 💖", "Catch you later! ✌️"]
+    },
+    {
+        "tag": "thanks",
+        "patterns": ["Thank you", "Thanks", "Thanks a lot", "I appreciate it"],
+        "responses": ["You're welcome! 💫", "No worries 😄", "Glad to help! 🤗"]
+    },
+    {
+        "tag": "about",
+        "patterns": ["What can you do", "Who are you", "What are you", "What is your purpose"],
+        "responses": ["I'm your friendly lil' chatbot 🤖", "Here to chat, chill, and vibe with you 💬✨"]
+    },
+    {
+        "tag": "help",
+        "patterns": ["Help", "I need help", "Can you help me", "What should I do"],
+        "responses": ["Of course! 💡 Just ask me anything.", "I got you! 💪 What do you need?"]
+    },
+    {
+        "tag": "age",
+        "patterns": ["How old are you", "What's your age"],
+        "responses": ["I'm forever young 🧸", "Age is just a number when you're a chatbot 😉"]
+    }
+]
 
-# Initialize scaler (ensure the same scaler used during training)
-scaler = MinMaxScaler()
-# Fit the scaler on the same data used during training
-# For demonstration, we simulate fitting on new data
-# In practice, save and load the scaler using joblib
-# scaler = joblib.load('model/scaler.pkl')
+# Train model
+corpus = []
+tags = []
+for intent in intents:
+    for pattern in intent['patterns']:
+        corpus.append(pattern)
+        tags.append(intent['tag'])
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    prediction = None
-    if request.method == 'POST':
-        try:
-            amount = float(request.form['amount'])
-            hour = int(request.form['hour'])
-            device_change = int(request.form['device_change'])
-            location_change = int(request.form['location_change'])
-            multiple_attempts = int(request.form['multiple_attempts'])
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(corpus)
+model = LogisticRegression()
+model.fit(X, tags)
 
-            # Create input array
-            input_data = np.array([[amount, hour, device_change, location_change, multiple_attempts]])
+def get_response(user_input):
+    X_test = vectorizer.transform([user_input])
+    prediction = model.predict(X_test)[0]
+    for intent in intents:
+        if intent["tag"] == prediction:
+            return random.choice(intent["responses"])
+    return "Hmm... I didn't get that 😅 Try again?"
 
-            # Normalize input data
-            input_scaled = scaler.transform(input_data)
+# Streamlit page setup
+st.set_page_config(page_title="Casual Chatbot", layout="centered")
 
-            # Predict reconstruction error
-            reconstruction = model.predict(input_scaled)
-            mse = np.mean(np.power(input_scaled - reconstruction, 2), axis=1)
+# Custom CSS for clean responsive look
+st.markdown("""
+<style>
+.chat-container {
+    max-width: 700px;
+    margin: auto;
+    padding: 20px;
+}
+.message {
+    padding: 10px 15px;
+    margin: 8px 0;
+    border-radius: 20px;
+    max-width: 75%;
+    word-wrap: break-word;
+}
+.user {
+    background-color: #d1f3ff;
+    margin-left: auto;
+    text-align: right;
+}
+.bot {
+    background-color: #ffd6dc;
+    margin-right: auto;
+    text-align: left;
+}
+.typing {
+    font-style: italic;
+    color: #999;
+    margin: 5px 0;
+}
+.input-box {
+    width: 100%;
+    margin-top: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-            # Define threshold (this should be determined during model evaluation)
-            threshold = 0.01  # Example threshold
+# App title
+st.title("💬 Casual Chatbot")
 
-            # Determine if transaction is fraudulent
-            is_fraud = mse > threshold
-            prediction = 'Fraudulent Transaction' if is_fraud else 'Legitimate Transaction'
-        except Exception as e:
-            prediction = f'Error: {str(e)}'
-    return render_template('index.html', prediction=prediction)
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# Session state to store conversation
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+
+# Text input box
+user_input = st.text_input("Type your message here...", label_visibility="collapsed", placeholder="Start chatting...")
+
+# Process user input
+if user_input:
+    st.session_state.chat.append(("user", user_input))
+    with st.spinner("Typing..."):
+        time.sleep(1.2)  # Simulated typing
+    response = get_response(user_input)
+    st.session_state.chat.append(("bot", response))
+
+# Display chat history
+for sender, message in st.session_state.chat:
+    role = "user" if sender == "user" else "bot"
+    st.markdown(f'<div class="message {role}">{message}</div>', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)  # Close chat-container
