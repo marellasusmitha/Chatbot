@@ -16,8 +16,7 @@ A friendly, emoji-powered chatbot built using **Streamlit**, designed for fun, c
 - 📚 Easy to expand with new intents
 
 ---
-
-## 📸 Demo
+Output demo
 
 [![Output](https://drive.google.com/file/d/1HnwfVt1DCZQYJrhy8BeuaIkbWDsNP6lR/view?usp=sharing)]
 
